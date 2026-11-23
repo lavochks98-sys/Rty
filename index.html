@@ -1,0 +1,945 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Лесное Озеро — 3D Рыбалка</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html,body { width:100%; height:100%; overflow:hidden; background:#0a1508;
+    font-family:'Segoe UI', Arial, sans-serif; color:#fff; }
+  #game { position:fixed; inset:0; }
+  canvas { display:block; }
+
+  #hud { position:fixed; top:12px; left:12px; z-index:10; pointer-events:none;
+    display:flex; flex-direction:column; gap:8px; }
+  .panel { background:rgba(10,25,15,.78); border:1px solid rgba(120,200,120,.35);
+    border-radius:10px; padding:10px 14px; backdrop-filter:blur(4px);
+    box-shadow:0 4px 14px rgba(0,0,0,.4); }
+  #coins { font-size:20px; font-weight:700; color:#ffd75e; }
+  #gearInfo { font-size:13px; line-height:1.5; color:#cfe8cf; }
+  #baitInfo { font-size:13px; color:#cfe8cf; }
+
+  #status { position:fixed; left:50%; transform:translateX(-50%); top:14px; z-index:10;
+    background:rgba(10,25,15,.8); border:1px solid rgba(120,200,120,.4);
+    padding:8px 22px; border-radius:20px; font-size:15px; text-align:center; min-width:260px; }
+
+  #hint { position:fixed; left:50%; transform:translateX(-50%); bottom:14px; z-index:10;
+    background:rgba(10,25,15,.7); border:1px solid rgba(120,200,120,.25);
+    padding:7px 18px; border-radius:18px; font-size:13px; color:#bcd9bc; }
+
+  #fightUI { position:fixed; left:50%; bottom:70px; transform:translateX(-50%);
+    width:460px; z-index:11; display:none; }
+  .barWrap { background:rgba(0,0,0,.55); border:1px solid rgba(255,255,255,.25);
+    border-radius:8px; height:20px; position:relative; overflow:hidden; margin-top:6px; }
+  .bar { height:100%; width:0%; transition:width .06s linear; }
+  #tensionBar { background:linear-gradient(90deg,#5ad35a,#d3d05a,#d35a5a); }
+  #staminaBar { background:linear-gradient(90deg,#d35a5a,#d3d05a,#5ad35a); }
+  .barLabel { position:absolute; inset:0; font-size:12px; display:flex;
+    align-items:center; justify-content:center; text-shadow:0 1px 2px #000; }
+  #fishName { text-align:center; font-size:18px; font-weight:700; color:#ffe9a8;
+    text-shadow:0 2px 4px #000; }
+  #fightHint { text-align:center; font-size:14px; margin-top:5px; font-weight:600;
+    color:#ff9d5c; height:18px; }
+
+  #catchPop { position:fixed; left:50%; top:30%; transform:translate(-50%,-50%) scale(.7);
+    z-index:20; background:rgba(20,45,25,.94); border:2px solid #ffd75e;
+    border-radius:16px; padding:24px 40px; text-align:center; font-size:18px;
+    opacity:0; pointer-events:none; transition:all .3s; box-shadow:0 0 40px rgba(255,215,94,.35); }
+  #catchPop.show { opacity:1; transform:translate(-50%,-50%) scale(1); }
+  #catchPop .big { font-size:26px; font-weight:800; color:#ffd75e; margin:4px 0; }
+  #catchPop .w { color:#a8e0ff; }
+
+  #toasts { position:fixed; right:14px; top:90px; z-index:15; display:flex;
+    flex-direction:column; gap:6px; pointer-events:none; }
+  .toast { background:rgba(10,25,15,.9); border-left:3px solid #ffd75e;
+    padding:8px 14px; border-radius:6px; font-size:13px; max-width:260px;
+    animation:tin .25s; }
+  @keyframes tin { from { opacity:0; transform:translateX(30px);} to {opacity:1;} }
+
+  #shop { position:fixed; inset:0; z-index:30; display:none; align-items:center;
+    justify-content:center; background:rgba(0,0,0,.55); }
+  #shopBox { width:min(720px, 93vw); max-height:84vh; background:#122619;
+    border:2px solid #5a8f5a; border-radius:14px; display:flex; flex-direction:column;
+    box-shadow:0 10px 60px rgba(0,0,0,.7); }
+  #shopHead { display:flex; align-items:center; gap:14px; padding:14px 20px;
+    border-bottom:1px solid rgba(120,200,120,.3); }
+  #shopHead h2 { font-size:20px; color:#ffd75e; flex:1; }
+  #shopCoins { color:#ffd75e; font-weight:700; }
+  #closeShop { background:#3a2020; border:1px solid #a05050; color:#ffb0b0;
+    padding:6px 14px; border-radius:8px; cursor:pointer; font-size:14px; }
+  #closeShop:hover { background:#5a3030; }
+  #shopTabs { display:flex; gap:6px; padding:10px 20px 0; }
+  .stab { padding:8px 18px; border:1px solid rgba(120,200,120,.3); border-bottom:none;
+    border-radius:8px 8px 0 0; cursor:pointer; background:rgba(255,255,255,.04); font-size:14px; }
+  .stab.active { background:#2a4a2e; color:#ffd75e; font-weight:700; }
+  #shopBody { overflow-y:auto; padding:14px 20px 20px; border-top:1px solid rgba(120,200,120,.3);
+    flex:1; min-height:220px; }
+  .item { display:flex; align-items:center; gap:14px; padding:11px 14px;
+    background:rgba(255,255,255,.05); border:1px solid rgba(120,200,120,.2);
+    border-radius:10px; margin-bottom:8px; }
+  .item .info { flex:1; }
+  .item .name { font-weight:700; font-size:15px; }
+  .item .desc { font-size:12px; color:#a8c8a8; margin-top:2px; line-height:1.45; }
+  .item button { background:#2a4a2e; border:1px solid #6a9f6a; color:#fff;
+    padding:7px 16px; border-radius:8px; cursor:pointer; font-size:13px; white-space:nowrap; }
+  .item button:hover { background:#3a6a3e; }
+  .item button:disabled { background:#333; border-color:#555; color:#888; cursor:default; }
+  .item button.equipped { background:#6a5a20; border-color:#ffd75e; color:#ffd75e; }
+  .fishRow { display:flex; align-items:center; gap:12px; padding:9px 14px;
+    background:rgba(255,255,255,.05); border-radius:8px; margin-bottom:6px; font-size:14px; }
+  .fishRow .nm { flex:1; }
+  .fishRow .pv { color:#ffd75e; font-weight:700; width:100px; text-align:right; }
+  #sellAll { width:100%; padding:11px; margin-top:8px; background:#6a5a20;
+    border:1px solid #ffd75e; color:#ffd75e; border-radius:10px; cursor:pointer;
+    font-size:15px; font-weight:700; }
+  #sellAll:hover { background:#7a6a2a; }
+
+  #start { position:fixed; inset:0; z-index:50; display:flex; align-items:center;
+    justify-content:center; background:radial-gradient(ellipse at center,#1a3520 0%,#0a1508 75%); }
+  #startBox { text-align:center; max-width:560px; padding:30px; }
+  #startBox h1 { font-size:40px; color:#ffd75e; margin-bottom:6px;
+    text-shadow:0 3px 12px rgba(0,0,0,.6); }
+  #startBox .sub { color:#a8c8a8; margin-bottom:22px; font-size:16px; }
+  #controls { text-align:left; background:rgba(0,0,0,.35); border-radius:12px;
+    padding:16px 22px; margin-bottom:22px; font-size:14px; line-height:1.9; color:#cfe8cf; }
+  #controls b { color:#ffd75e; display:inline-block; min-width:120px; }
+  #playBtn { background:#4a8a3e; border:none; color:#fff; font-size:19px; font-weight:700;
+    padding:13px 48px; border-radius:12px; cursor:pointer; box-shadow:0 6px 20px rgba(74,138,62,.5); }
+  #playBtn:hover { background:#5aae4a; }
+</style>
+</head>
+<body>
+<div id="game"></div>
+
+<div id="hud">
+  <div class="panel" id="coins">🪙 0 монет</div>
+  <div class="panel" id="gearInfo"></div>
+  <div class="panel" id="baitInfo"></div>
+</div>
+
+<div id="status">Забросьте снасть — ЛКМ по воде</div>
+
+<div id="fightUI">
+  <div id="fishName">???</div>
+  <div class="barWrap"><div class="bar" id="tensionBar"></div><div class="barLabel">Натяжение лески</div></div>
+  <div class="barWrap"><div class="bar" id="staminaBar"></div><div class="barLabel">Силы рыбы</div></div>
+  <div id="fightHint"></div>
+</div>
+
+<div id="hint">W/S — вперёд/назад · A/D — поворот · ЛКМ — заброс · ПРОБЕЛ — подсечка/подмотка · E — магазин</div>
+
+<div id="catchPop"><div>🎣 Улов!</div><div class="big" id="cpFish"></div><div class="w" id="cpW"></div><div id="cpVal" style="color:#ffd75e;margin-top:6px;"></div></div>
+
+<div id="toasts"></div>
+
+<div id="shop">
+  <div id="shopBox">
+    <div id="shopHead"><h2>🏪 Судовой магазин</h2><div id="shopCoins"></div><button id="closeShop">Закрыть (E)</button></div>
+    <div id="shopTabs">
+      <div class="stab active" data-tab="sell">🐟 Продать улов</div>
+      <div class="stab" data-tab="rods">🎣 Удочки</div>
+      <div class="stab" data-tab="reels">🌀 Катушки</div>
+      <div class="stab" data-tab="baits">🪱 Приманки</div>
+    </div>
+    <div id="shopBody"></div>
+  </div>
+</div>
+
+<div id="start">
+  <div id="startBox">
+    <h1>🌲 Лесное Озеро 🎣</h1>
+    <div class="sub">3D-рыбалка: ловите, продавайте, прокачивайтесь</div>
+    <div id="controls">
+      <b>W / S</b> грести вперёд / назад<br>
+      <b>A / D</b> поворачивать лодку<br>
+      <b>ЛКМ</b> заброс удочки (по воде рядом с лодкой)<br>
+      <b>ПРОБЕЛ</b> подсечка при клёве, затем держать — подмотка<br>
+      <b>E</b> открыть магазин (продажа рыбы, снаряжение)<br>
+    </div>
+    <button id="playBtn">▶ Начать рыбалку</button>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+'use strict';
+
+// ------------------------- Данные игры -------------------------
+const SPECIES = [
+  { id:'roach',  name:'Плотва',       min:0.10, max:0.9,  w:22, str:1.0, price:14, col:0xbfc8d0, rare:1.00 },
+  { id:'perch',  name:'Окунь',        min:0.10, max:1.4,  w:20, str:1.7, price:20, col:0x4a7a3a, rare:0.95 },
+  { id:'cruc',   name:'Карась',       min:0.20, max:1.8,  w:17, str:1.6, price:17, col:0xc8a23a, rare:0.9 },
+  { id:'bream',  name:'Лещ',          min:0.5,  max:3.8,  w:10, str:2.2, price:24, col:0xc8b878, rare:0.7 },
+  { id:'carp',   name:'Карп',         min:1.5,  max:12,   w:5,  str:3.6, price:32, col:0xa06a2a, rare:0.45 },
+  { id:'zander', name:'Судак',        min:1.0,  max:8,    w:4,  str:3.1, price:46, col:0x7a8a5a, rare:0.4 },
+  { id:'pike',   name:'Щука',         min:1.0,  max:14,   w:3,  str:4.2, price:42, col:0x4a6a4a, rare:0.35 },
+  { id:'cat',    name:'Сом',          min:5.0,  max:38,   w:1.2,str:5.6, price:38, col:0x3a3a2a, rare:0.16 },
+  { id:'gold',   name:'Золотой карп', min:8.0,  max:22,   w:0.7,str:5.0, price:95, col:0xffd24a, rare:0.08, gold:true },
+];
+
+const BAITS = [
+  { id:'worm',   name:'Червь (∞)',  price:0,  infinite:true, bite:1.0,
+    aff:{ roach:1.2, perch:1.2, cruc:1.3, bream:1.1, carp:1.0, cat:1.2, zander:0.4, pike:0.3, gold:1.0 },
+    desc:'Универсальная классика. Бесконечный запас' },
+  { id:'corn',   name:'Кукуруза',   price:12, pack:20, bite:1.0,
+    aff:{ roach:0.8, perch:0.4, cruc:1.6, bream:2.0, carp:2.2, gold:2.4, cat:1.0, zander:0.2, pike:0.2 },
+    desc:'Для мирной рыбы: карп, лещ, карась. Крупнее экземпляры' },
+  { id:'maggot', name:'Опарыш',     price:18, pack:20, bite:0.65,
+    aff:{ roach:1.5, perch:1.4, cruc:1.5, bream:1.4, carp:1.0, zander:0.8, pike:0.5, cat:0.8, gold:1.0 },
+    desc:'Клёв начинается заметно быстрее' },
+  { id:'spoon',  name:'Блесна',     price:45, pack:12, bite:1.15,
+    aff:{ roach:0.0, cruc:0.0, bream:0.0, perch:2.0, pike:2.4, zander:2.2, cat:1.2, carp:0.0, gold:0.0 },
+    desc:'Для хищника: щука, судак, окунь' },
+  { id:'live',   name:'Живец',      price:30, pack:10, bite:1.3,
+    aff:{ roach:0.0, cruc:0.0, bream:0.0, perch:1.0, pike:1.8, zander:1.8, cat:2.6, carp:0.0, gold:0.0 },
+    desc:'Крупная насадка: сом клюёт в разы охотнее' },
+];
+
+const RODS = [
+  { id:'r1', name:'Ореховая удочка',           price:0,    range:14, max:4,  fight:1.0,
+    desc:'Начало пути. Дальность 14 м · лимит 4 кг' },
+  { id:'r2', name:'«Ромашка» (стеклопластик)', price:350,  range:19, max:8,  fight:1.25,
+    desc:'Надёжная рабочая лошадка. 19 м · до 8 кг' },
+  { id:'r3', name:'Карбон «Профессионал»',     price:1200, range:25, max:16, fight:1.5,
+    desc:'Лёгкий и звонкий бланк. 25 м · до 16 кг' },
+  { id:'r4', name:'Карбон «Трофейная»',        price:3200, range:32, max:30, fight:1.8,
+    desc:'Для настоящих трофеев. 32 м · до 30 кг' },
+  { id:'r5', name:'«Легенда озера»',           price:8000, range:40, max:60, fight:2.2,
+    desc:'Ей покоряется даже сом. 40 м · до 60 кг' },
+];
+
+const REELS = [
+  { id:'k1', name:'Инерционная катушка', price:0,    reel:1.0,
+    desc:'База. Подмотка ×1.0' },
+  { id:'k2', name:'Безынерционная',      price:280,  reel:1.35,
+    desc:'Легче крутится и гасит рывки. ×1.35' },
+  { id:'k3', name:'Мультипликатор',      price:900,  reel:1.7,
+    desc:'Серьёзная тяга. ×1.7' },
+  { id:'k4', name:'«Турбо» baitrunner',  price:2400, reel:2.15,
+    desc:'Чтобы рыба не уходила. ×2.15' },
+];
+
+// ------------------------- Состояние -------------------------
+const S = {
+  coins: 60,
+  rod: 'r1',
+  reel: 'k1',
+  baits: { worm: Infinity },
+  curBait: 'worm',
+  inv: [],
+  ownedRods: ['r1'],
+  ownedReels: ['k1'],
+};
+
+function save(){ try{ localStorage.setItem('fishing3d_save', JSON.stringify({
+  coins:S.coins, rod:S.rod, reel:S.reel, baits:S.baits, curBait:S.curBait,
+  inv:S.inv, ownedRods:S.ownedRods, ownedReels:S.ownedReels
+})); }catch(e){} }
+function load(){
+  try{
+    const d = JSON.parse(localStorage.getItem('fishing3d_save'));
+    if(d && typeof d.coins === 'number'){
+      S.coins=d.coins; S.rod=d.rod||'r1'; S.reel=d.reel||'k1';
+      S.baits=Object.assign({worm:Infinity}, d.baits||{}); S.baits.worm=Infinity;
+      S.curBait=d.curBait||'worm'; S.inv=d.inv||[];
+      S.ownedRods=d.ownedRods||['r1']; S.ownedReels=d.ownedReels||['k1'];
+    }
+  }catch(e){}
+}
+load();
+
+function rod(){  return RODS.find(r=>r.id===S.rod) || RODS[0]; }
+function reel(){ return REELS.find(r=>r.id===S.reel) || REELS[0]; }
+function baitDef(){ return BAITS.find(b=>b.id===S.curBait) || BAITS[0]; }
+function hasBait(){ const b = S.baits[S.curBait]; return b===Infinity || b>0; }
+function useBait(){ const b=S.baits[S.curBait]; if(b!==Infinity){ S.baits[S.curBait]=Math.max(0,b-1); } }
+
+// ------------------------- Three.js сцена -------------------------
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x87b5d8);
+scene.fog = new THREE.Fog(0x9fc4dd, 60, 190);
+
+const camera = new THREE.PerspectiveCamera(60, innerWidth/innerHeight, 0.1, 400);
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+document.getElementById('game').appendChild(renderer.domElement);
+
+const sun = new THREE.DirectionalLight(0xfff2d0, 1.1);
+sun.position.set(40, 60, 25);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+sun.shadow.camera.left=-90; sun.shadow.camera.right=90;
+sun.shadow.camera.top=90; sun.shadow.camera.bottom=-90;
+scene.add(sun);
+scene.add(new THREE.AmbientLight(0x7f9fb8, 0.7));
+scene.add(new THREE.HemisphereLight(0xbcd6ea, 0x3a5a2a, 0.5));
+
+// ------------------------- Озеро -------------------------
+const LAKE_R = 62;
+const waterGeo = new THREE.PlaneGeometry(300, 300, 80, 80);
+waterGeo.rotateX(-Math.PI/2);
+const wPos = waterGeo.attributes.position;
+const water = new THREE.Mesh(waterGeo, new THREE.MeshPhongMaterial({
+  color:0x27506b, transparent:true, opacity:0.92,
+  shininess:90, specular:0x4a7a9a, flatShading:true
+}));
+water.receiveShadow = true;
+scene.add(water);
+
+const floor = new THREE.Mesh(
+  new THREE.CircleGeometry(300, 48),
+  new THREE.MeshLambertMaterial({ color:0x27301d })
+);
+floor.rotation.x = -Math.PI/2; floor.position.y = -1.4;
+scene.add(floor);
+
+const ring = new THREE.Mesh(
+  new THREE.RingGeometry(LAKE_R-2.5, 150, 64),
+  new THREE.MeshLambertMaterial({ color:0x4a6a30 })
+);
+ring.rotation.x = -Math.PI/2; ring.position.y = 0.35;
+ring.receiveShadow = true;
+scene.add(ring);
+
+// ------------------------- Лес -------------------------
+const trunkMat = new THREE.MeshLambertMaterial({ color:0x5a3f26 });
+const crownMats = [0x2a5a2a,0x35683a,0x2d6b47,0x40702e].map(c=>new THREE.MeshLambertMaterial({color:c}));
+(function forest(){
+  for(let i=0;i<210;i++){
+    const ang = Math.random()*Math.PI*2;
+    const rad = LAKE_R + 3 + Math.random()*80;
+    const t = new THREE.Group();
+    const h = 4+Math.random()*7;
+    const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.22,0.34,h,6), trunkMat);
+    trunk.position.y = h/2; trunk.castShadow = true;
+    t.add(trunk);
+    const cm = crownMats[(Math.random()*crownMats.length)|0];
+    const cy = h*0.75;
+    const layers = 2+(Math.random()*3|0);
+    for(let l=0;l<layers;l++){
+      const cr = new THREE.Mesh(new THREE.ConeGeometry(1.9-l*0.45, 2.6, 7), cm);
+      cr.position.y = cy + l*1.5;
+      cr.castShadow = true;
+      t.add(cr);
+    }
+    t.position.set(Math.cos(ang)*rad, 0, Math.sin(ang)*rad);
+    t.rotation.y = Math.random()*Math.PI;
+    t.scale.setScalar(0.8+Math.random()*0.7);
+    scene.add(t);
+  }
+  const bushMat = new THREE.MeshLambertMaterial({color:0x2d6b3a});
+  for(let i=0;i<70;i++){
+    const ang = Math.random()*Math.PI*2, rad = LAKE_R-1+Math.random()*7;
+    const b = new THREE.Mesh(new THREE.SphereGeometry(0.8+Math.random()*1.1, 6, 5), bushMat);
+    b.position.set(Math.cos(ang)*rad, 0.5, Math.sin(ang)*rad);
+    b.scale.y = 0.7; b.castShadow = true;
+    scene.add(b);
+  }
+  const rockMat = new THREE.MeshLambertMaterial({color:0x6a6f66});
+  for(let i=0;i<30;i++){
+    const ang = Math.random()*Math.PI*2, rad = LAKE_R-2+Math.random()*10;
+    const r = new THREE.Mesh(new THREE.DodecahedronGeometry(0.5+Math.random()*1.2, 0), rockMat);
+    r.position.set(Math.cos(ang)*rad, 0.15, Math.sin(ang)*rad);
+    r.rotation.set(Math.random(),Math.random(),Math.random());
+    r.castShadow = true;
+    scene.add(r);
+  }
+  const lilypadMat = new THREE.MeshLambertMaterial({color:0x3f8a3f, side:THREE.DoubleSide});
+  for(let i=0;i<40;i++){
+    const ang = Math.random()*Math.PI*2, rad = Math.random()*(LAKE_R-6);
+    const pad = new THREE.Mesh(new THREE.CircleGeometry(0.35+Math.random()*0.4, 7), lilypadMat);
+    pad.rotation.x = -Math.PI/2;
+    pad.position.set(Math.cos(ang)*rad, 0.12, Math.sin(ang)*rad);
+    scene.add(pad);
+  }
+})();
+
+// ------------------------- Лодка + рыбак -------------------------
+const boat = new THREE.Group();
+const wood = new THREE.MeshLambertMaterial({ color:0x8a5a30 });
+const woodDark = new THREE.MeshLambertMaterial({ color:0x6a441f });
+const man = new THREE.Group();
+const rodG = new THREE.Group();
+(function buildBoat(){
+  const bottom = new THREE.Mesh(new THREE.BoxGeometry(1.9, 0.18, 4.6), woodDark);
+  bottom.position.y = 0.35; bottom.castShadow = true;
+  boat.add(bottom);
+  const nose = new THREE.Mesh(new THREE.ConeGeometry(0.95, 1.4, 4), wood);
+  nose.rotation.x = -Math.PI/2; nose.rotation.y = Math.PI/4;
+  nose.position.set(0, 0.6, -2.6); nose.scale.set(1, 1, 0.55);
+  nose.castShadow = true;
+  boat.add(nose);
+  const sideGeo = new THREE.BoxGeometry(0.16, 0.7, 4.6);
+  const l = new THREE.Mesh(sideGeo, wood); l.position.set(-0.95, 0.8, 0);
+  const r = new THREE.Mesh(sideGeo, wood); r.position.set(0.95, 0.8, 0);
+  const st = new THREE.Mesh(new THREE.BoxGeometry(1.9, 0.7, 0.16), wood); st.position.set(0, 0.8, 2.3);
+  const fn = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.7, 0.16), wood); fn.position.set(0, 0.8, -2.0);
+  [l, r, st, fn].forEach(m=>{ m.castShadow = true; boat.add(m); });
+  const bench = new THREE.Mesh(new THREE.BoxGeometry(1.85, 0.12, 0.5), wood);
+  bench.position.set(0, 1.02, 0.7); boat.add(bench);
+
+  // Сундук-магазин
+  const chest = new THREE.Group();
+  const cbody = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.6, 0.7),
+    new THREE.MeshLambertMaterial({color:0x6a4a7a}));
+  cbody.position.y = 0.3;
+  const clid = new THREE.Mesh(new THREE.BoxGeometry(1.14, 0.16, 0.74),
+    new THREE.MeshLambertMaterial({color:0x9a6a3a}));
+  clid.position.y = 0.66;
+  const sign = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.22, 0.05),
+    new THREE.MeshBasicMaterial({color:0xffd75e}));
+  sign.position.set(0, 0.78, 0.0);
+  chest.add(cbody, clid, sign);
+  chest.position.set(-0.35, 0.44, -1.4);
+  boat.add(chest);
+
+  // --- Рыбак ---
+  const skin = new THREE.MeshLambertMaterial({ color:0xd8a878 });
+  const shirt = new THREE.MeshLambertMaterial({ color:0x3a6a4a });
+  const pants = new THREE.MeshLambertMaterial({ color:0x2a3a5a });
+  const boots = new THREE.MeshLambertMaterial({ color:0x3a2a1a });
+  const hat = new THREE.MeshLambertMaterial({ color:0x8a7a3a });
+
+  const legs = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.5, 0.3), pants);
+  legs.position.y = 0.25; man.add(legs);
+  const lb = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.14, 0.34), boots); lb.position.set(-0.12, 0.05, 0.02); man.add(lb);
+  const rb = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.14, 0.34), boots); rb.position.set(0.12, 0.05, 0.02); man.add(rb);
+  const torso = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.6, 0.34), shirt);
+  torso.position.y = 0.8; man.add(torso);
+  const head = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.34, 0.34), skin);
+  head.position.y = 1.29; man.add(head);
+  const capB = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.1, 0.38), hat); capB.position.y = 1.48; man.add(capB);
+  const capP = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.05, 0.2), hat); capP.position.set(0, 1.45, -0.26); man.add(capP);
+  const armGeo = new THREE.BoxGeometry(0.13, 0.13, 0.5);
+  const la = new THREE.Mesh(armGeo, shirt); la.position.set(-0.3, 1.02, -0.28); la.rotation.x = 0.5; man.add(la);
+  const ra = new THREE.Mesh(armGeo, shirt); ra.position.set(0.3, 1.02, -0.28); ra.rotation.x = 0.5; man.add(ra);
+  man.position.set(0, 1.1, 0.6);
+  boat.add(man);
+
+  // --- Удочка в руках ---
+  const rodStick = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.045, 2.6, 6),
+    new THREE.MeshLambertMaterial({ color:0x4a3020 }));
+  rodStick.rotation.x = Math.PI/2 - 0.85;
+  rodStick.position.set(0, 0.9, -1.0);
+  rodStick.castShadow = true;
+  rodG.add(rodStick);
+  const cork = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.4, 6),
+    new THREE.MeshLambertMaterial({ color:0xb08a50 }));
+  cork.rotation.x = Math.PI/2 - 0.85;
+  cork.position.set(0, 0.6, 0.15);
+  rodG.add(cork);
+  man.add(rodG);
+
+  boat.traverse(m=>{ if(m.isMesh) m.castShadow = true; });
+})();
+boat.position.set(0, 0.15, 20);
+scene.add(boat);
+
+// Поплавок
+const bobber = new THREE.Group();
+{
+  const body = new THREE.Mesh(new THREE.SphereGeometry(0.14, 10, 8),
+    new THREE.MeshLambertMaterial({ color:0xd8d8d8 }));
+  const top = new THREE.Mesh(new THREE.SphereGeometry(0.14, 10, 8, 0, Math.PI*2, 0, Math.PI/2),
+    new THREE.MeshLambertMaterial({ color:0xd83a3a }));
+  const stick = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.34, 5),
+    new THREE.MeshLambertMaterial({ color:0x333333 }));
+  stick.position.y = 0.14;
+  bobber.add(body, top, stick);
+}
+bobber.visible = false;
+scene.add(bobber);
+
+// Леска
+const lineGeo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]);
+const fishingLine = new THREE.Line(lineGeo,
+  new THREE.LineBasicMaterial({ color:0xffffff, transparent:true, opacity:0.65 }));
+fishingLine.visible = false;
+scene.add(fishingLine);
+
+let fishMesh = null;
+function makeFishMesh(sp, wt){
+  killFishMesh();
+  const mat = new THREE.MeshPhongMaterial({ color:sp.col, shininess:60 });
+  const f = new THREE.Group();
+  const size = 0.5 + Math.min(wt, 25)*0.085;
+  const body = new THREE.Mesh(new THREE.SphereGeometry(0.35, 8, 6), mat);
+  body.scale.set(size*1.6, size, size*0.6);
+  f.add(body);
+  const tail = new THREE.Mesh(new THREE.ConeGeometry(0.2*size*2, 0.5*size*2, 4), mat);
+  tail.rotation.x = Math.PI/2;
+  tail.position.x = 0.55*size*1.6;
+  f.add(tail);
+  scene.add(f);
+  fishMesh = f;
+}
+function killFishMesh(){
+  if(fishMesh){ scene.remove(fishMesh); fishMesh = null; }
+}
+
+// ------------------------- Игровая логика -------------------------
+const keys = {};
+let state = 'IDLE';   // IDLE | CASTING | WAIT | BITE | FIGHT
+let gameTime = 0;
+
+const boatCtl = { speed:0, heading:0 };
+const BOAT_MAX_R = LAKE_R - 4;
+
+const cast = { t:0, dur:1, from:new THREE.Vector3(), to:new THREE.Vector3(), peak:0 };
+const biteD = { timer:0, window:0, fish:null, weight:0 };
+const fight = {
+  tension:0, stamina:1, len:0,
+  running:false, runTimer:0, restTimer:0,
+  str:1, sp:null, wt:0, brokeLine:false
+};
+
+const statusEl = document.getElementById('status');
+const fightUI = document.getElementById('fightUI');
+const tensionBar = document.getElementById('tensionBar');
+const staminaBar = document.getElementById('staminaBar');
+const fishNameEl = document.getElementById('fishName');
+const fightHint = document.getElementById('fightHint');
+
+function setStatus(t){ statusEl.textContent = t; }
+function toast(t){
+  const box = document.getElementById('toasts');
+  const el = document.createElement('div');
+  el.className = 'toast'; el.textContent = t;
+  box.appendChild(el);
+  setTimeout(()=>{ el.style.opacity='0'; el.style.transition='opacity .4s'; }, 2600);
+  setTimeout(()=>el.remove(), 3100);
+  while(box.children.length > 5) box.firstChild.remove();
+}
+
+function updateHUDBasics(){
+  document.getElementById('coins').textContent = '🪙 ' + Math.floor(S.coins) + ' монет';
+  const b = baitDef();
+  const cnt = (S.baits[S.curBait] === Infinity) ? '∞' : (S.baits[S.curBait]||0);
+  document.getElementById('baitInfo').textContent = '🪱 Приманка: ' + b.name + ' (' + cnt + ')';
+  document.getElementById('gearInfo').innerHTML =
+    '🎣 ' + rod().name + '<br>🌀 ' + reel().name + ' · дальность ' + rod().range + ' м · лимит ' + rod().max + ' кг';
+}
+updateHUDBasics();
+
+// ------------------------- Заброс / клёв / бой -------------------------
+function rodTipWorld(){
+  return rodG.localToWorld(new THREE.Vector3(0, 1.85, -2.1));
+}
+
+function startCast(target){
+  if(!hasBait()){ toast('Приманка «' + baitDef().name + '» закончилась! Купите в магазине (E)'); return; }
+  if(state !== 'IDLE') return;
+  useBait(); updateHUDBasics(); save();
+
+  cast.from.copy(rodTipWorld()); cast.to.copy(target);
+  const d = cast.from.distanceTo(cast.to);
+  cast.dur = Math.min(1.1, 0.35 + d/rod().range);
+  cast.peak = Math.min(d*0.35, 3.5);
+  cast.t = 0;
+  bobber.visible = true;
+  fishingLine.visible = true;
+  state = 'CASTING';
+  setStatus('Заброс…');
+}
+
+function scheduleBite(){
+  const bd = baitDef();
+  biteD.timer = (6 + Math.random()*12) * bd.bite;
+  const probs = [];
+  let total = 0;
+  for(const sp of SPECIES){
+    const aff = bd.aff[sp.id] || 0;
+    if(aff <= 0) continue;
+    const p = sp.w * sp.rare * aff;
+    probs.push({ sp, p });
+    total += p;
+  }
+  let r = Math.random()*total;
+  let pick = probs[0].sp;
+  for(const it of probs){ r -= it.p; if(r <= 0){ pick = it.sp; break; } }
+  biteD.fish = pick;
+  const span = pick.max - pick.min;
+  let w = pick.min + Math.pow(Math.random(), 1.6)*span;
+  if(Math.random() < 0.12) w = (pick.min+pick.max)/2 + Math.random()*(pick.max - (pick.min+pick.max)/2);
+  biteD.weight = Math.max(pick.min, Math.min(pick.max, w));
+}
+
+function sellValue(sp, wt){ return Math.round(wt * sp.price * (sp.gold ? 1.5 : 1)); }
+
+function onHook(){
+  if(state !== 'BITE') return;
+  state = 'FIGHT';
+  fight.sp = biteD.fish; fight.wt = biteD.weight;
+  fight.brokeLine = false;
+  fight.tension = 0.15;
+  fight.stamina = 1;
+  const wf = 0.7 + (fight.wt - fight.sp.min)/(fight.sp.max - fight.sp.min)*0.6;
+  fight.str = fight.sp.str * wf;
+  fight.len = Math.max(2, bobber.position.distanceTo(boat.position));
+  fight.running = false;
+  fight.restTimer = 0.8 + Math.random();
+  fishNameEl.textContent = '🐟 ' + fight.sp.name + (fight.sp.gold ? ' ✨' : '') + ' (' + fight.wt.toFixed(1) + ' кг)';
+  fightUI.style.display = 'block';
+  fightHint.textContent = '';
+  makeFishMesh(fight.sp, fight.wt);
+  setStatus('Вываживай! Держи ПРОБЕЛ — подмотка');
+}
+
+function endFight(escaped){
+  fightUI.style.display = 'none';
+  bobber.visible = false;
+  fishingLine.visible = false;
+  killFishMesh();
+  if(escaped){
+    if(fight.brokeLine){
+      toast('💥 Леска не выдержала! ' + fight.sp.name + ' (' + fight.wt.toFixed(1) + ' кг) ушёл…');
+      if(fight.wt > rod().max) toast('💡 Совет: нужна удочка помощнее (магазин — E)');
+    } else {
+      toast('💨 ' + fight.sp.name + ' сорвался…');
+    }
+    setStatus('Забросьте снасть — ЛКМ по воде');
+  } else {
+    S.inv.push({ sp: fight.sp.id, wt: +fight.wt.toFixed(2) });
+    const pop = document.getElementById('catchPop');
+    document.getElementById('cpFish').textContent = fight.sp.name + (fight.sp.gold ? ' ✨' : '');
+    document.getElementById('cpW').textContent = fight.wt.toFixed(2) + ' кг';
+    document.getElementById('cpVal').textContent = '≈ ' + sellValue(fight.sp, fight.wt) + ' 🪙 (продать в магазине)';
+    pop.classList.add('show');
+    setTimeout(()=>pop.classList.remove('show'), 2400);
+    setStatus('Забросьте снасть — ЛКМ по воде');
+  }
+  state = 'IDLE';
+  updateHUDBasics();
+  save();
+}
+
+// ------------------------- Управление -------------------------
+let reeling = false;
+addEventListener('keydown', e=>{
+  keys[e.code] = true;
+  if(e.code === 'Space'){
+    e.preventDefault();
+    reeling = true;
+    if(state === 'BITE') onHook();
+  }
+  if(e.code === 'KeyE') toggleShop();
+});
+addEventListener('keyup', e=>{
+  keys[e.code] = false;
+  if(e.code === 'Space') reeling = false;
+});
+
+const raycaster = new THREE.Raycaster();
+const mouseNDC = new THREE.Vector2();
+renderer.domElement.addEventListener('pointerdown', e=>{
+  if(e.button !== 0 || shopOpen) return;
+  if(state === 'BITE'){ onHook(); return; }
+  if(state !== 'IDLE') return;
+  mouseNDC.x = (e.clientX/innerWidth)*2 - 1;
+  mouseNDC.y = -(e.clientY/innerHeight)*2 + 1;
+  raycaster.setFromCamera(mouseNDC, camera);
+  const dir = raycaster.ray.direction;
+  const org = raycaster.ray.origin;
+  if(dir.y >= -0.02) return;
+  const t = -org.y / dir.y;
+  const p = org.clone().addScaledVector(dir, t);
+  const dist = p.distanceTo(boat.position);
+  if(dist > 2.5 && dist <= rod().range){
+    startCast(p);
+  } else if(dist > rod().range){
+    toast('Далековато! Дальность удочки: ' + rod().range + ' м');
+  }
+});
+
+// ------------------------- Магазин -------------------------
+let shopOpen = false;
+const shopEl = document.getElementById('shop');
+const shopBody = document.getElementById('shopBody');
+let shopTab = 'sell';
+
+function toggleShop(force){
+  const want = (force !== undefined) ? force : !shopOpen;
+  shopOpen = want;
+  shopEl.style.display = want ? 'flex' : 'none';
+  if(want) renderShop();
+}
+
+document.querySelectorAll('.stab').forEach(el=>{
+  el.addEventListener('click', ()=>{
+    document.querySelectorAll('.stab').forEach(x=>x.classList.remove('active'));
+    el.classList.add('active');
+    shopTab = el.dataset.tab;
+    renderShop();
+  });
+});
+document.getElementById('closeShop').addEventListener('click', ()=>toggleShop(false));
+
+function renderShop(){
+  document.getElementById('shopCoins').textContent = '🪙 ' + Math.floor(S.coins);
+  shopBody.innerHTML = '';
+  if(shopTab === 'sell'){
+    if(S.inv.length === 0){
+      shopBody.innerHTML = '<div style="color:#a8c8a8;padding:30px;text-align:center;">Улов пока пуст. Иди на рыбалку! 🎣</div>';
+      return;
+    }
+    const bySpecies = {};
+    for(const f of S.inv){ (bySpecies[f.sp] = bySpecies[f.sp] || []).push(f); }
+    let total = 0;
+    for(const k in bySpecies){
+      const sp = SPECIES.find(s=>s.id===k);
+      let wsum = 0, vsum = 0;
+      bySpecies[k].forEach(f=>{ wsum += f.wt; vsum += sellValue(sp, f.wt); });
+      total += vsum;
+      const row = document.createElement('div');
+      row.className = 'fishRow';
+      row.innerHTML = '<span class="nm">' + sp.name + (sp.gold?' ✨':'') + ' × ' + bySpecies[k].length +
+        ' <span style="color:#88a;">(' + wsum.toFixed(2) + ' кг)</span></span>' +
+        '<span class="pv">' + vsum + ' 🪙</span>';
+      shopBody.appendChild(row);
+    }
+    const btn = document.createElement('button');
+    btn.id = 'sellAll';
+    btn.textContent = 'Продать весь улов за ' + Math.round(total) + ' 🪙';
+    btn.onclick = ()=>{
+      S.coins += total;
+      S.inv = [];
+      save(); updateHUDBasics(); renderShop();
+      toast('Улов продан за ' + Math.round(total) + ' 🪙!');
+    };
+    shopBody.appendChild(btn);
+  }
+  else if(shopTab === 'rods' || shopTab === 'reels'){
+    const list = (shopTab === 'rods') ? RODS : REELS;
+    const ownedKey = (shopTab === 'rods') ? 'ownedRods' : 'ownedReels';
+    const equipped = (shopTab === 'rods') ? S.rod : S.reel;
+    for(const it of list){
+      const owned = S[ownedKey].includes(it.id);
+      const row = document.createElement('div');
+      row.className = 'item';
+      const btn = document.createElement('button');
+      if(owned){
+        if(equipped === it.id){ btn.textContent = '✓ Экипировано'; btn.className='equipped'; btn.disabled = true; }
+        else { btn.textContent = 'Экипировать'; btn.onclick = ()=>{
+          if(shopTab==='rods') S.rod = it.id; else S.reel = it.id;
+          save(); updateHUDBasics(); renderShop();
+        }; }
+      } else {
+        btn.textContent = 'Купить · ' + it.price + ' 🪙';
+        btn.disabled = S.coins < it.price;
+        btn.onclick = ()=>{
+          if(S.coins < it.price) return;
+          S.coins -= it.price;
+          S[ownedKey].push(it.id);
+          if(shopTab==='rods') S.rod = it.id; else S.reel = it.id;
+          save(); updateHUDBasics(); renderShop();
+          toast('Куплено: ' + it.name + '!');
+        };
+      }
+      row.innerHTML = '<div class="info"><div class="name">' + it.name + '</div><div class="desc">' + it.desc + '</div></div>';
+      row.appendChild(btn);
+      shopBody.appendChild(row);
+    }
+  }
+  else {
+    for(const b of BAITS){
+      if(b.infinite) continue;
+      const have = S.baits[b.id] || 0;
+      const row = document.createElement('div');
+      row.className = 'item';
+      const btn = document.createElement('button');
+      const isCur = S.curBait === b.id;
+      if(isCur){ btn.textContent = '✓ Снаряжена (' + have + ')'; btn.className='equipped'; btn.disabled = true; }
+      else {
+        btn.textContent = 'Снарядить';
+        btn.disabled = have <= 0;
+        btn.onclick = ()=>{ S.curBait = b.id; save(); updateHUDBasics(); renderShop(); };
+      }
+      const buy = document.createElement('button');
+      buy.textContent = 'Купить ×' + b.pack + ' · ' + b.price + ' 🪙';
+      buy.disabled = S.coins < b.price;
+      buy.onclick = ()=>{
+        if(S.coins < b.price) return;
+        S.coins -= b.price;
+        S.baits[b.id] = (S.baits[b.id]||0) + b.pack;
+        if(!hasBait()) S.curBait = b.id;
+        save(); updateHUDBasics(); renderShop();
+        toast('Куплено: ' + b.name + ' ×' + b.pack);
+      };
+      row.innerHTML = '<div class="info"><div class="name">' + b.name +
+        ' <span style="color:#88a;">— в запасе: ' + have + '</span></div>' +
+        '<div class="desc">' + b.desc + '</div></div>';
+      row.appendChild(buy); row.appendChild(btn);
+      shopBody.appendChild(row);
+    }
+  }
+}
+
+// ------------------------- Анимация -------------------------
+const clock = new THREE.Clock();
+
+function animateWater(t){
+  for(let i=0;i<wPos.count;i++){
+    const px = wPos.getX(i), pz = wPos.getZ(i);
+    const h = Math.sin(px*0.25 + t*1.2)*0.10 + Math.sin(pz*0.18 + t*0.9)*0.10
+            + Math.sin((px+pz)*0.12 + t*0.6)*0.07;
+    wPos.setY(i, h);
+  }
+  wPos.needsUpdate = true;
+  water.geometry.computeVertexNormals();
+}
+
+function tickBoat(dt){
+  const fwd = (keys['KeyW']?1:0) - (keys['KeyS']?1:0);
+  const turn = (keys['KeyA']?1:0) - (keys['KeyD']?1:0);
+  boatCtl.speed += (fwd*6 - boatCtl.speed)*Math.min(1, dt*2.2);
+  boatCtl.heading += turn * dt * 1.6 * (Math.abs(boatCtl.speed) > 0.4 ? 1 : 0.4);
+  boat.rotation.y = boatCtl.heading;
+  const nx = boat.position.x - Math.sin(boatCtl.heading)*boatCtl.speed*dt;
+  const nz = boat.position.z - Math.cos(boatCtl.heading)*boatCtl.speed*dt;
+  const r = Math.sqrt(nx*nx + nz*nz);
+  if(r > BOAT_MAX_R){ boatCtl.speed *= 0.4; }
+  else { boat.position.x = nx; boat.position.z = nz; }
+  boat.position.y = 0.12 + Math.sin(gameTime*1.8)*0.05 + Math.sin(gameTime*2.7)*0.03;
+  boat.rotation.z = Math.sin(gameTime*1.5)*0.025;
+  boat.rotation.x = Math.sin(gameTime*1.1)*0.02;
+}
+
+function tickFishing(dt){
+  const t = gameTime;
+  if(state === 'CASTING'){
+    cast.t += dt;
+    const k = Math.min(1, cast.t/cast.dur);
+    const p = cast.from.clone().lerp(cast.to, k);
+    p.y = 0.05 + Math.sin(k*Math.PI)*cast.peak;
+    bobber.position.copy(p);
+    if(k >= 1){
+      state = 'WAIT';
+      scheduleBite();
+      setStatus('Ждём поклёвку…');
+    }
+  }
+  else if(state === 'WAIT'){
+    bobber.position.y = 0.02 + Math.sin(t*2.2)*0.03;
+    bobber.rotation.z = Math.sin(t*3)*0.1;
+    biteD.timer -= dt;
+    if(biteD.timer < 1.4){
+      bobber.rotation.z = Math.sin(t*18)*0.25;
+      if(biteD.timer <= 0){
+        state = 'BITE';
+        biteD.window = 1.35;
+        setStatus('🔔 КЛЮЁТ! Жми ПРОБЕЛ!');
+      }
+    }
+  }
+  else if(state === 'BITE'){
+    bobber.position.y = -0.05 + Math.sin(t*30)*0.05;
+    biteD.window -= dt;
+    if(biteD.window <= 0){
+      state = 'WAIT';
+      scheduleBite();
+      setStatus('Упустил… ждём снова…');
+      toast('⏳ Поздно! Рыба ушла с наживкой.');
+    }
+  }
+  else if(state === 'FIGHT'){
+    const F = fight;
+    if(F.running){
+      F.runTimer -= dt;
+      if(F.runTimer <= 0){ F.running = false; F.restTimer = 0.7 + Math.random()*1.6; }
+      F.tension += F.str * dt * (reeling ? 0.65 : 0.30);
+      F.stamina -= dt * 0.05;
+      if(reeling) F.len -= reel().reel * dt * 0.25;
+    } else {
+      F.restTimer -= dt;
+      if(F.restTimer <= 0 && F.stamina > 0.25){
+        F.running = true; F.runTimer = 0.6 + Math.random()*1.4;
+      }
+      F.tension += reeling ? F.str*0.32*dt : -0.45*dt;
+      if(reeling){
+        F.len -= reel().reel*rod().fight*dt*(0.9 + F.stamina*0.4);
+        F.stamina -= dt * reel().reel * 0.13;
+      }
+    }
+    F.tension = Math.max(0, Math.min(1.02, F.tension));
+    F.stamina = Math.max(0, F.stamina);
+    F.len = Math.max(0.6, F.len);
+    if(F.stamina <= 0 && F.running){ F.running = false; F.restTimer = 1.5; }
+
+    tensionBar.style.width = (F.tension*100) + '%';
+    staminaBar.style.width = (F.stamina*100) + '%';
+    fightHint.textContent = F.running ? '⚠️ РЫБА РВЁТ! ОТПУСТИ ПРОБЕЛ!' : 'Тяни! Держи ПРОБЕЛ';
+
+    if(F.tension >= 1.02){
+      F.brokeLine = true;
+      endFight(true);
+      return;
+    }
+    if(F.len <= 1.6){
+      endFight(false);
+      return;
+    }
+
+    bobber.position.y = -0.05 - (F.running?0.18:0.02) + Math.sin(t*26)*(F.running?0.08:0.02);
+    const dirA = t*1.3 + (F.running ? Math.sin(t*7)*1.2 : 0);
+    const tx = boat.position.x + Math.sin(dirA)*F.len*0.85;
+    const tz = boat.position.z + Math.cos(dirA)*F.len*0.85;
+    bobber.position.x += (tx - bobber.position.x)*Math.min(1, dt*3);
+    bobber.position.z += (tz - bobber.position.z)*Math.min(1, dt*3);
+    if(fishMesh){
+      fishMesh.position.set(bobber.position.x, -0.35 - (F.running?0.15:0), bobber.position.z);
+      fishMesh.rotation.y = dirA + Math.PI/2;
+      fishMesh.rotation.z = F.running ? Math.sin(t*14)*0.4 : Math.sin(t*4)*0.1;
+    }
+  }
+
+  if(fishingLine.visible){
+    const tip = rodTipWorld();
+    const pos = lineGeo.attributes.position;
+    pos.setXYZ(0, tip.x, tip.y, tip.z);
+    pos.setXYZ(1, bobber.position.x, bobber.position.y, bobber.position.z);
+    pos.needsUpdate = true;
+  }
+}
+
+const camPos = new THREE.Vector3(0, 8, 28);
+function tickCamera(dt){
+  const back = 10, up = 5.5;
+  const desired = new THREE.Vector3(
+    boat.position.x + Math.sin(boatCtl.heading)*back,
+    boat.position.y + up,
+    boat.position.z + Math.cos(boatCtl.heading)*back
+  );
+  camPos.lerp(desired, Math.min(1, dt*2.5));
+  camera.position.copy(camPos);
+  camera.lookAt(boat.position.x, boat.position.y + 1.5, boat.position.z);
+}
+
+function loop(){
+  requestAnimationFrame(loop);
+  const dt = Math.min(0.05, clock.getDelta());
+  gameTime += dt;
+  animateWater(gameTime);
+  tickBoat(dt);
+  tickFishing(dt);
+  tickCamera(dt);
+  renderer.render(scene, camera);
+}
+loop();
+
+addEventListener('resize', ()=>{
+  camera.aspect = innerWidth/innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+document.getElementById('playBtn').addEventListener('click', ()=>{
+  document.getElementById('start').style.display = 'none';
+  updateHUDBasics();
+});
+</script>
+</body>
+</html>
