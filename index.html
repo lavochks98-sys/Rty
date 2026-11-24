@@ -128,13 +128,31 @@
   #tShop  { right:18px; top:70px; width:56px; height:56px; font-size:24px; }
   body.touch #status { top:auto; bottom:180px; }
   .tbtn span.small { font-size:11px; display:block; }
+  #tCam    { left:18px; top:70px; width:56px; height:56px; font-size:24px; }
+  #tTrophy { left:18px; top:140px; width:56px; height:56px; font-size:24px; }
+
+  /* ---------- Упрощённый интерфейс ---------- */
+  #cToggle { pointer-events:auto; background:rgba(0,0,0,.3); border:1px solid rgba(160,220,160,.4);
+    color:#cfe8cf; border-radius:6px; padding:2px 9px; cursor:pointer; font-size:12px; margin-left:10px; }
+  #cToggle:hover { background:rgba(80,140,80,.5); }
+  body.hudCompact #gearInfo, body.hudCompact #baitInfo { display:none; }
+  body.hudCompact .panel#coins { font-size:15px; padding:6px 10px; }
+  body.hudCompact #cToggle { transform:rotate(180deg); }
+  .recRow { display:flex; align-items:center; gap:12px; padding:8px 14px;
+    background:rgba(255,255,255,.04); border-radius:8px; margin-bottom:5px; font-size:14px; }
+  .recRow .nm { flex:1; }
+  .recRow .wgt { color:#a8e0ff; }
+  .recRow.missed { color:#77806f; }
+  .shopStat { text-align:center; padding:14px; margin-bottom:12px; background:rgba(255,215,94,.08);
+    border:1px solid rgba(255,215,94,.3); border-radius:10px; font-size:14px; line-height:1.7; }
+  .shopStat b { color:#ffd75e; font-size:18px; }
 </style>
 </head>
 <body>
 <div id="game"></div>
 
 <div id="hud">
-  <div class="panel" id="coins">🪙 0 монет</div>
+  <div class="panel" id="coins">🪙 0 монет<button id="cToggle" title="Свернуть/развернуть интерфейс">ⓘ</button></div>
   <div class="panel" id="gearInfo"></div>
   <div class="panel" id="baitInfo"></div>
 </div>
@@ -162,6 +180,7 @@
       <div class="stab" data-tab="rods">🎣 Удочки</div>
       <div class="stab" data-tab="reels">🌀 Катушки</div>
       <div class="stab" data-tab="baits">🪱 Приманки</div>
+      <div class="stab" data-tab="trophy">🏆 Трофеи</div>
     </div>
     <div id="shopBody"></div>
   </div>
@@ -174,6 +193,8 @@
   <div class="tbtn" id="tDown">▼</div>
   <div class="tbtn" id="tReel"><span>🎣<span class="small">мотать</span></span></div>
   <div class="tbtn" id="tShop">🏪</div>
+  <div class="tbtn" id="tCam" title="Вид">👁</div>
+  <div class="tbtn" id="tTrophy" title="Трофеи">🏆</div>
 </div>
 
 <div id="start">
@@ -186,6 +207,9 @@
       <b>ЛКМ</b> заброс удочки (по воде рядом с лодкой)<br>
       <b>ПРОБЕЛ</b> подсечка при клёве, затем держать — подмотка<br>
       <b>E</b> открыть магазин (продажа рыбы, снаряжение)<br>
+      <b>V</b> вид от первого / третьего лица<br>
+      <b>T</b> трофеи и личные рекорды<br>
+      <b>ⓘ</b> свернуть / развернуть интерфейс<br>
     </div>
     <button id="playBtn">▶ Начать рыбалку</button>
   </div>
@@ -260,11 +284,15 @@ const S = {
   inv: [],
   ownedRods: ['r1'],
   ownedReels: ['k1'],
+  records: {},
+  totalCaught: 0,
+  log: [],
 };
 
 function save(){ try{ localStorage.setItem('fishing3d_save', JSON.stringify({
   coins:S.coins, rod:S.rod, reel:S.reel, baits:S.baits, curBait:S.curBait,
-  inv:S.inv, ownedRods:S.ownedRods, ownedReels:S.ownedReels
+  inv:S.inv, ownedRods:S.ownedRods, ownedReels:S.ownedReels,
+  records:S.records, totalCaught:S.totalCaught, log:S.log
 })); }catch(e){} }
 function load(){
   try{
@@ -274,6 +302,7 @@ function load(){
       S.baits=Object.assign({worm:Infinity}, d.baits||{}); S.baits.worm=Infinity;
       S.curBait=d.curBait||'worm'; S.inv=d.inv||[];
       S.ownedRods=d.ownedRods||['r1']; S.ownedReels=d.ownedReels||['k1'];
+      S.records=d.records||{}; S.totalCaught=d.totalCaught||0; S.log=d.log||[];
     }
   }catch(e){}
 }
@@ -600,6 +629,8 @@ function scheduleBite(){
 
 function sellValue(sp, wt){ return Math.round(wt * sp.price * (sp.gold ? 1.5 : 1)); }
 
+const REC_SEEN = (function(){ const o={}; for(const k in S.records) o[k]=true; return o; })();
+
 function onHook(){
   if(state !== 'BITE') return;
   state = 'FIGHT';
@@ -634,6 +665,19 @@ function endFight(escaped){
     setStatus('Забросьте снасть — ЛКМ по воде');
   } else {
     S.inv.push({ sp: fight.sp.id, wt: +fight.wt.toFixed(2) });
+    const prevRec = S.records[fight.sp.id] || 0;
+    if(fight.wt > prevRec){
+      S.records[fight.sp.id] = +fight.wt.toFixed(2);
+      if(prevRec > 0) toast('🏆 Новый личный рекорд: ' + fight.sp.name + ' ' + fight.wt.toFixed(2) + ' кг!');
+    }
+    if(!(fight.sp.id in REC_SEEN)){
+      REC_SEEN[fight.sp.id] = true;
+      toast('✨ Новый вид в трофеях: ' + fight.sp.name + (fight.sp.gold ? ' ✨' : '') + '!');
+    }
+    S.totalCaught++;
+    S.log.unshift({ sp: fight.sp.id, wt: +fight.wt.toFixed(2) });
+    if(S.log.length > 60) S.log.pop();
+    REC_SEEN[fight.sp.id] = true;
     const pop = document.getElementById('catchPop');
     document.getElementById('cpFish').textContent = fight.sp.name + (fight.sp.gold ? ' ✨' : '');
     document.getElementById('cpW').textContent = fight.wt.toFixed(2) + ' кг';
@@ -657,7 +701,7 @@ if(isTouch){
     '<b>▲ ▼</b> грести вперёд / назад<br>' +
     '<b>Тап по воде</b> заброс удочки<br>' +
     '<b>🎣 Мотать</b> подсечка при клёве; держать — подмотка<br>' +
-    '<b>🏪 Кнопка E</b> магазин (продажа рыбы, снаряжение)';
+    '<b>🏪 / 🏆 / 👁</b> магазин / трофеи / вид от первого лица';
 }
 
 function bindHold(btnId, down, up){
@@ -682,6 +726,14 @@ if(isTouch){
   const tShop = document.getElementById('tShop');
   tShop.addEventListener('pointerdown', (e)=>{ e.preventDefault(); e.stopPropagation(); toggleShop(); });
   tShop.addEventListener('contextmenu', e=>e.preventDefault());
+  const tCam = document.getElementById('tCam');
+  tCam.addEventListener('pointerdown', (e)=>{ e.preventDefault(); e.stopPropagation();
+    setCamMode(camMode === 'FP' ? 'TP' : 'FP'); });
+  const tTrophy = document.getElementById('tTrophy');
+  tTrophy.addEventListener('pointerdown', (e)=>{ e.preventDefault(); e.stopPropagation();
+    shopTab = 'trophy';
+    document.querySelectorAll('.stab').forEach(x=>x.classList.toggle('active', x.dataset.tab==='trophy'));
+    toggleShop(true); });
   // отключаем подсветку :active при скролле/масштабировании
   document.addEventListener('gesturestart', e=>e.preventDefault());
 }
@@ -696,6 +748,10 @@ addEventListener('keydown', e=>{
     if(state === 'BITE') onHook();
   }
   if(e.code === 'KeyE') toggleShop();
+  if(e.code === 'KeyV' && !shopOpen){ setCamMode(camMode === 'FP' ? 'TP' : 'FP'); }
+  if(e.code === 'KeyT' && !shopOpen){ shopTab = 'trophy';
+    document.querySelectorAll('.stab').forEach(x=>x.classList.toggle('active', x.dataset.tab==='trophy'));
+    toggleShop(true); }
 });
 addEventListener('keyup', e=>{
   keys[e.code] = false;
@@ -811,6 +867,40 @@ function renderShop(){
       row.innerHTML = '<div class="info"><div class="name">' + it.name + '</div><div class="desc">' + it.desc + '</div></div>';
       row.appendChild(btn);
       shopBody.appendChild(row);
+    }
+  }
+  else if(shopTab === 'trophy'){
+    const caught = Object.keys(S.records).length;
+    let bestId = null, bestW = 0;
+    for(const k in S.records){ if(S.records[k] > bestW){ bestW = S.records[k]; bestId = k; } }
+    const bestSp = bestId ? SPECIES.find(s=>s.id===bestId) : null;
+    const stat = document.createElement('div');
+    stat.className = 'shopStat';
+    stat.innerHTML = 'Всего поймано: <b>' + S.totalCaught + '</b> 🐟 &nbsp;·&nbsp; видов: <b>' + caught + '/' + SPECIES.length + '</b><br>' +
+      'Главный трофей: <b>' + (bestSp ? bestSp.name + ' — ' + bestW.toFixed(2) + ' кг' : 'пока —') + '</b> 🏆';
+    shopBody.appendChild(stat);
+    const sorted = SPECIES.slice().sort((a,b)=>(S.records[b.id]||0)-(S.records[a.id]||0));
+    for(const sp of sorted){
+      const rec = S.records[sp.id];
+      const row = document.createElement('div');
+      row.className = 'recRow' + (rec ? '' : ' missed');
+      row.innerHTML = '<span class="nm">' + (sp.gold?'✨ ':'') + sp.name + '</span>' +
+        '<span class="wgt">' + (rec ? '🏆 ' + rec.toFixed(2) + ' кг' : '— не пойман') + '</span>';
+      shopBody.appendChild(row);
+    }
+    if(S.log.length){
+      const h = document.createElement('div');
+      h.style.cssText = 'margin:16px 0 8px;font-weight:700;color:#ffd75e;';
+      h.textContent = 'Последние уловы:';
+      shopBody.appendChild(h);
+      for(const f of S.log.slice(0, 20)){
+        const sp = SPECIES.find(s=>s.id===f.sp);
+        const row = document.createElement('div');
+        row.className = 'fishRow';
+        row.innerHTML = '<span class="nm">' + sp.name + (sp.gold?' ✨':'') + '</span>' +
+          '<span class="pv" style="width:auto;">' + f.wt.toFixed(2) + ' кг</span>';
+        shopBody.appendChild(row);
+      }
     }
   }
   else {
@@ -975,7 +1065,24 @@ function tickFishing(dt){
 }
 
 const camPos = new THREE.Vector3(0, 8, 28);
+let camMode = 'TP';
+function setCamMode(m){
+  camMode = m;
+  man.visible = (m === 'TP');
+  toast(m === 'FP' ? '👁 Вид от первого лица' : '🎥 Вид от третьего лица');
+}
 function tickCamera(dt){
+  if(camMode === 'FP'){
+    const p = boat.localToWorld(new THREE.Vector3(0, 2.45, 0.6));
+    p.y += Math.sin(gameTime*1.4)*0.03;
+    camera.position.copy(p);
+    camera.lookAt(
+      p.x - Math.sin(boatCtl.heading)*30,
+      p.y - 2.6,
+      p.z - Math.cos(boatCtl.heading)*30
+    );
+    return;
+  }
   const back = 10, up = 5.5;
   const desired = new THREE.Vector3(
     boat.position.x + Math.sin(boatCtl.heading)*back,
@@ -1009,6 +1116,12 @@ document.getElementById('playBtn').addEventListener('click', ()=>{
   document.getElementById('start').style.display = 'none';
   updateHUDBasics();
 });
+
+// Режим интерфейса: компактный по умолчанию на сенсорных экранах
+let hudCompact = isTouch;
+function applyHud(){ document.body.classList.toggle('hudCompact', hudCompact); }
+document.getElementById('cToggle').addEventListener('click', ()=>{ hudCompact = !hudCompact; applyHud(); });
+applyHud();
 </script>
 </body>
 </html>
